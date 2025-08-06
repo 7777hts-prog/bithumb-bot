@@ -1,4 +1,5 @@
 from flask import Flask
+import os
 
 app = Flask(__name__)
 
@@ -8,4 +9,5 @@ def home():
 
 if __name__ == '__main__':
     print("월하 봇 시작!")
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.environ.get('PORT', 10000))  # Render 호환 포트
+    app.run(host='0.0.0.0', port=port)
