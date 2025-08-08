@@ -8,16 +8,16 @@ import pandas as pd
 import requests
 from flask import Flask, jsonify, request
 
-# --------- 기본 설정 ---------
+# ---------- 기본 설정 ----------
 TIMEOUT = 8
 USER_AGENT = "bithumb-bot/1.0"
 
 # 스캔 임계값
 SCAN_TOPN = int(os.getenv("SCAN_TOPN", "5"))
-SCAN_MIN_CHANGE = float(os.getenv("SCAN_MIN_CHANGE", "6.0"))          # %
+SCAN_MIN_CHANGE = float(os.getenv("SCAN_MIN_CHANGE", "6.0"))              # %
 SCAN_MIN_ACC_VALUE = float(os.getenv("SCAN_MIN_ACC_VALUE", "100000000"))  # KRW
 
-# 예측 임계값(4H, 중장기)
+# 예측 임계값(4H)
 CFG = {
     "TIMEFRAME": os.getenv("PREDICT_TIMEFRAME", "4h"),
     "LOOKBACK": int(os.getenv("PREDICT_LOOKBACK", "150")),
@@ -46,9 +46,10 @@ def http_get_json(url, params=None):
     r.raise_for_status()
     return r.json()
 
-# --------- 외부 데이터 ---------
+# ---------- 외부 데이터 ----------
 def bt_tickers() -> dict:
-    return http_get_json("https://api.bithumb.com/public/tickers")
+    # ★ 여기 수정: ALL_KRW 명시
+    return http_get_json("https://api.bithumb.com/public/tickers/ALL_KRW")
 
 def bt_candles(symbol_krw: str, timeframe: str, limit: int) -> list:
     s = symbol_krw.replace("/", "_")
@@ -65,7 +66,7 @@ def gate_ticker(symbol_usdt: str) -> dict:
                         params={"currency_pair": symbol_usdt})
     return arr[0]
 
-# --------- 지표 ---------
+# ---------- 지표 ----------
 def bollinger_pos(close: pd.Series, window: int, nstd: float):
     ma = close.rolling(window).mean()
     std = close.rolling(window).std(ddof=0)
@@ -92,7 +93,7 @@ def linreg_slope(y: pd.Series) -> float:
     den = ((x - x.mean())**2).sum()
     return float(num/den) if den else 0.0
 
-# --------- 예측 시그널 ---------
+# ---------- 예측 시그널 ----------
 @dataclass
 class Signals:
     vol_ratio: float
@@ -123,7 +124,6 @@ def compute_signals(df: pd.DataFrame, symbol: str) -> Signals:
     obv_slope = linreg_slope(obv_series(df)[-CFG["OBV_SLOPE_WINDOW"]:])
     premium_pct, buy_ratio = np.nan, np.nan
 
-    # Gate 프리미엄
     try:
         g = gate_ticker(f"{symbol.split('/')[0]}_USDT")
         gate_price_krw = float(g["last"]) * GATE_KRW_RATE
@@ -131,7 +131,6 @@ def compute_signals(df: pd.DataFrame, symbol: str) -> Signals:
             premium_pct = (float(df['close'].iloc[-1]) / gate_price_krw -1.0) * 100.0
     except: pass
 
-    # 오더북 매수 우위
     try:
         ob = bt_orderbook(symbol).get("data", {})
         bids = sum(float(x["quantity"]) for x in ob.get("bids", []))
@@ -154,15 +153,12 @@ def score_signals(s: Signals) -> Tuple[float, Dict[str, Any]]:
         "obv_slope": s.obv_slope, "premium_pct": s.premium_pct, "buy_ratio": s.buy_ratio
     }
 
-# --------- Flask ---------
+# ---------- Flask ----------
 app = Flask(__name__)
 
 @app.route("/")
 def root():
-    return jsonify({
-        "ok": True,
-        "routes": ["/health", "/scan", "/predict?symbols=MNT/KRW,BB/KRW"]
-    })
+    return jsonify({"ok": True, "routes": ["/health", "/scan", "/predict?symbols=MNT/KRW,BB/KRW"]})
 
 @app.route("/health")
 def health():
@@ -202,7 +198,6 @@ def predict():
     if syms_param:
         target = [s.strip() for s in syms_param.split(",") if s.strip()]
     else:
-        # /scan 결과 재활용
         scan_res = scan().json
         target = [c["symbol"] for c in scan_res.get("coins", [])]
 
