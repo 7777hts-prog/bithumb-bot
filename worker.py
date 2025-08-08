@@ -1,46 +1,29 @@
-import os, time, json, requests
+import requests
 
-WEB_URL  = os.getenv("WEB_URL")      # 추후 /update 연결시 사용
-API_KEY  = os.getenv("API_KEY")      # main.py와 같은 값
-INTERVAL = int(os.getenv("INTERVAL_SECONDS", "600"))  # 초 단위, 기본 10분
-
-def fetch_bithumb_all():
+def get_top_moving_coins():
     url = "https://api.bithumb.com/public/ticker/ALL_KRW"
-    r = requests.get(url, timeout=10)
-    return r.json().get("data", {})
+    res = requests.get(url).json()
 
-def pick_hot_coins(data):
-    out = []
-    for sym, info in data.items():
-        if not isinstance(info, dict): 
+    coins = []
+    for symbol, data in res['data'].items():
+        if symbol == 'date':
             continue
+        
         try:
-            chg  = float(info.get("fluctate_rate_24H", 0.0))   # 24h 변동률 %
-            vol  = float(info.get("units_traded_24H", 0.0))    # 24h 거래량
-            last = float(info.get("closing_price", 0.0))
+            change_rate = (float(data['closing_price']) - float(data['prev_closing_price'])) / float(data['prev_closing_price']) * 100
+            volume = float(data['acc_trade_value_24H'])  # 거래대금 (원화 기준)
 
-            # 📌 조금 완화된 조건
-            # 거래량 기준 기존보다 20% 낮춤, 상승률 기준 0.5% 낮춤
-            if chg > 4.5 and vol > 800_000 and last > 0:
-                out.append(sym)
-
-        except Exception:
+            # 엄격 필터
+            if change_rate >= 6 and volume >= 10_000_000_000:
+                coins.append({
+                    "symbol": symbol,
+                    "price": float(data['closing_price']),
+                    "change": round(change_rate, 2),
+                    "volume": volume
+                })
+        except:
             continue
-    return out
 
-def push_to_web(coins):
-    print("SCAN:", coins[:20])
-    # 나중에 /update 연결할 때 아래 코드 활성화
-    # headers = {"X-API-KEY": API_KEY, "Content-Type":"application/json"}
-    # payload = {"coins": coins, "status": "success"}
-    # requests.post(f"{WEB_URL}/update", headers=headers, data=json.dumps(payload), timeout=10)
-
-if __name__ == "__main__":
-    while True:
-        try:
-            data  = fetch_bithumb_all()
-            coins = pick_hot_coins(data)
-            push_to_web(coins)
-        except Exception as e:
-            print("ERR:", e)
-        time.sleep(INTERVAL)
+    # 변동률 기준 내림차순 정렬 후 상위 5개
+    coins = sorted(coins, key=lambda x: x['change'], reverse=True)[:5]
+    return coins
