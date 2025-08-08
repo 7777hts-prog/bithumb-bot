@@ -18,8 +18,12 @@ def pick_hot_coins(data):
             chg  = float(info.get("fluctate_rate_24H", 0.0))   # 24h 변동률 %
             vol  = float(info.get("units_traded_24H", 0.0))    # 24h 거래량
             last = float(info.get("closing_price", 0.0))
-            if chg > 1 and vol > 1_000_000 and last > 0:
+
+            # 📌 조금 완화된 조건
+            # 거래량 기준 기존보다 20% 낮춤, 상승률 기준 0.5% 낮춤
+            if chg > 4.5 and vol > 800_000 and last > 0:
                 out.append(sym)
+
         except Exception:
             continue
     return out
