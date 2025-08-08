@@ -49,7 +49,7 @@ def http_get_json(url, params=None):
 # ---------- 외부 데이터 ----------
 def bt_tickers() -> dict:
     # ★ 여기 수정: ALL_KRW 명시
-    return http_get_json("https://api.bithumb.com/public/ticker/ALL_KRW")
+    return http_get_json("https://api.bithumb.com/public/ticker/ALL_KRW/")
 
 def bt_candles(symbol_krw: str, timeframe: str, limit: int) -> list:
     s = symbol_krw.replace("/", "_")
