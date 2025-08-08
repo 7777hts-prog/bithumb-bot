@@ -1,3 +1,4 @@
+Flask
 requests
-flask
-schedule
+pandas
+numpy
